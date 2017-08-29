@@ -23,6 +23,15 @@
  * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+definition(
+    name: "Auto Lock Dook",
+    namespace: "csader",
+    author: "csader",
+    description: "Autolocks a door if closed and unlocked for a given duration.",
+    category: "Safety and Security",
+    iconUrl: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/Cat-SafetyAndSecurity.png",
+    iconX2Url: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/Cat-SafetyAndSecurity@2x.png")
+
 preferences
 {
     section("When a door unlocks...") {
@@ -62,13 +71,19 @@ def lockDoor()
 {
     log.debug "Locking Door if Closed"
     if((openSensor.latestValue("contact") == "closed")){
-    	log.debug "Door Closed"
-    	lock1.lock()
+        log.debug "Door Closed"
+        if (sendPush) {
+            sendPush("Auto-locking ${lock1.displayName}")
+        }
+        lock1.lock()
     } else {
-    	if ((openSensor.latestValue("contact") == "open")) {
-        def delay = minutesLater * 60
-        log.debug "Door open will try again in $minutesLater minutes"
-        runIn( delay, lockDoor )
+        if ((openSensor.latestValue("contact") == "open")) {
+            if (sendPush) {
+                sendPush("${lock1.displayName} left open!")
+            }
+            def delay = minutesLater * 60
+            log.debug "Door open will try again in $minutesLater minutes"
+            runIn( delay, lockDoor )
         }
     }
 }
@@ -86,11 +101,18 @@ def doorClosed(evt) {
 
 def doorHandler(evt)
 {
-    log.debug "Door ${openSensor.latestValue}"
+    log.debug "Door ${openSensor.latestValue("contact")}"
     log.debug "Lock ${evt.name} is ${evt.value}."
 
     if (evt.value == "locked") {                  // If the human locks the door then...
         log.debug "Cancelling previous lock task..."
+        unschedule( lockDoor )                  // ...we don't need to lock it later.
+    }
+    else if (evt.value == "unknown") {          // The door likely jammed, notify
+        // Notify
+        if (sendPush) {
+            sendPush("The ${lock1.displayName} is jammed!")
+        }
         unschedule( lockDoor )                  // ...we don't need to lock it later.
     }
     else {                                      // If the door is unlocked then...
